@@ -1,0 +1,33 @@
+Processed root file             charge
+me11data/2pct/A6745.root        1.92  
+me11data/2pct/A6790.root        9.31  
+######################################
+me11data/2pct/A6829.root        15.85 
+######################################
+me11data/2pct/A6869.root        15.86 
+me11data/2pct/A6928.root        21.59 
+######################################
+me11data/2pct/A7001.root        27.48 
+######################################
+me11data/2pct/A7042.root        27.54 
+me11data/2pct/A7079.root        28.29 
+me11data/2pct/A7136.root        29.63 
+me11data/2pct/A7183.root        31.47 
+me11data/2pct/A7269.root        32.44 
+me11data/2pct/A7314.root        32.93 
+me11data/2pct/A7450.root        35.1  
+me11data/2pct/A7503.root        41.86 
+me11data/2pct/A7558.root        48.44 
+me11data/2pct/A7608.root        55.3  
+me11data/2pct/A7647.root        61.3  
+me11data/2pct/A7690.root        67.57 
+me11data/2pct/A7756.root        68.8  
+me11data/2pct/A7801.root        76.03 
+me11data/2pct/A7843.root        90.26 
+me11data/2pct/A7889.root        97.65 
+me11data/2pct/A7944.root        104.17
+me11data/2pct/A7992.root        110.26
+me11data/2pct/A8038.root        115.64
+me11data/2pct/A8086.root        121.71
+me11data/2pct/A8132.root        127.64
+me11data/2pct/A8179.root        133.31

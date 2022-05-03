@@ -1,0 +1,116 @@
+70a71
+>   int           chamberTag;
+72c73
+< 
+---
+>   bool          debugTag;
+82d82
+<   float * wN;        // Number of wires per a wiregroup
+88c88
+<   int                        chamberType;
+---
+>   short unsigned int         chamberType;
+150c150
+<    chamberType  = iConfig.getUntrackedParameter<int>("chamberTag");
+---
+>    chamberTag   = iConfig.getUntrackedParameter<int>("chamberTag");
+152c152,155
+<    debug        = iConfig.getUntrackedParameter<bool>("debugTag");
+---
+>    debugTag     = iConfig.getUntrackedParameter<bool>("debugTag");
+> 
+>    chamberType = chamberTag;
+>    debug       = debugTag;
+175d177
+<    wN = new float [*nOfWGs];
+179d180
+< 	   wN[i]  = 0;
+251,269c252
+< 	float WGtotalWireLength[*nOfWGs];
+< 	//https://twiki.cern.ch/twiki/pub/CMS/CSCagingTest/Kamenev-ME1-1_GIF_Wirelength.pdf
+< 	float ME11GIFwgTotalWL[48] = {
+< 			 2901.9863  , 2995.38356 , 3088.78082 , 2948.68493 , 3029.21624 , 3109.74755 , 3190.27886 , 3270.81018 ,
+< 			 3351.34149 , 3431.8728  , 3512.40411 , 3592.93542 , 3673.46673 , 3753.99804 , 3834.52935 , 3915.06067 ,
+< 			 3682.52055 , 3751.13894 , 3819.75734 , 3888.37573 , 3956.99413 , 4025.61252 , 4094.23092 , 4162.84932 ,
+< 			 4231.46771 , 4300.08611 , 4368.7045  , 4437.3229  , 4505.94129 , 4574.55969 , 4643.17808 , 4711.79648 ,
+< 			 4780.41487 , 4849.03327 , 4917.65166 , 4986.27006 , 5054.88845 , 5123.50685 , 5192.12524 , 5260.74364 ,
+< 			 5329.36204 , 5397.98043 , 5466.59883 , 5535.21722 , 5603.83562 , 5672.45401 , 5741.07241 , 5809.6908
+< 	};
+< 	for(short unsigned int i=0; i<*(nOfWGs);i++){
+< 		if(chamberType==1){ // currently GIF type
+< 			WGtotalWireLength[i] = ME11GIFwgTotalWL[i]/10;
+< 		}else if (chamberType==2){
+< 			WGtotalWireLength[i] = wL[i]*wN[i];
+< 		}else{
+< 			WGtotalWireLength[i] = 1;
+< 		};
+< 	};
+---
+> 
+279,283c262,263
+< 						//hAhitLNorm[l][j]->SetBinContent(i+1, hAhitL[l][j]->GetBinContent(i+1)/wL[i]/norm);
+< 						//hAhitLNorm[l][j]->SetBinError  (i+1, hAhitL[l][j]->GetBinError(i+1)/wL[i]/norm);
+< 						hAhitLNorm[l][j]->SetBinContent(i+1, hAhitL[l][j]->GetBinContent(i+1)/WGtotalWireLength[i]/norm);
+< 						hAhitLNorm[l][j]->SetBinError  (i+1, hAhitL[l][j]->GetBinError(i+1)/WGtotalWireLength[i]/norm);
+< 
+---
+> 						hAhitLNorm[l][j]->SetBinContent(i+1, hAhitL[l][j]->GetBinContent(i+1)/wL[i]/norm);
+> 						hAhitLNorm[l][j]->SetBinError  (i+1, hAhitL[l][j]->GetBinError(i+1)/wL[i]/norm);
+304c284
+< 			std::cout << hNofAhitL[l][j]->GetName() << "\t" << hNofAhitL[l][j]->GetEntries() << std::endl;
+---
+> 			//std::cout << hNofAhitL[l][j]->GetName() << "\t" << hNofAhitL[l][j]->GetEntries() << std::endl;
+312c292
+< 		std::cout << h2dNofAhitWG[l]->GetName() << "\t" << h2dNofAhitWG[l]->GetEntries() << std::endl;
+---
+> 		//std::cout << h2dNofAhitWG[l]->GetName() << "\t" << h2dNofAhitWG[l]->GetEntries() << std::endl;
+323c303
+< 		std::cout << hNofAhit[j]->GetName() << "\t" << hNofAhit[j]->GetEntries() << std::endl;
+---
+> 		//std::cout << hNofAhit[j]->GetName() << "\t" << hNofAhit[j]->GetEntries() << std::endl;
+372,381c352,356
+< 	float sumWL    = 0;
+< 	float sumWLxWN = 0;
+< 	for(short unsigned int i=0; i<*(nOfWGs);i++){
+< 		sumWL+=   wL[i];
+< 		sumWLxWN+=wL[i]*wN[i];
+< 		std::cout << i<< "\t"<< wL[i] << "\t"<< wN[i] << "\t"<< wL[i]*wN[i] << "\t" << wH1[i] << std::endl;
+< 	};
+< 	std::cout << "total wireLength " << sumWL << "; with wN " << sumWLxWN << std::endl;
+< 	std::cout << "total events:    " << prevEvtN       << std::endl;
+< 	std::cout << "ALCT hit events: " << evtsProceededA << std::endl;
+---
+> //	for(short unsigned int i=0; i<*(nOfWGs);i++){
+> //		std::cout << i<< "\t"<< wL[i] << "\t" << wH1[i] << std::endl;
+> //	};
+> //	std::cout << "total events:    " << prevEvtN       << std::endl;
+> //	std::cout << "ALCT hit events: " << evtsProceededA << std::endl;
+471c446
+< 			for(short unsigned int i=0; i<*(nOfWGs);i++){
+---
+> 			for(short unsigned int i=0; i<*(nOfWGs);i++)
+473,492d447
+< 				if(chamberType==1){
+< 					wN[i] = 11;
+< 				}else if (chamberType==2){
+< 					if(i<64){
+< 						wN[i] = 5;
+< 					}else{
+< 						wN[i] = 6;
+< 					}
+< 				};
+< 			};
+< 			if(chamberType==1){
+< 				wN[0]  = 37;
+< 				wN[47] = 43;
+< 			}else if (chamberType==2){
+< 				wN[43] = 2;
+< 				wN[44] = 2;
+< 				wN[79] = 3;
+< 				wN[80] = 3;
+< 				wN[111]= 8;
+< 			};
+494c449
+< 		}
+---
+> 		};

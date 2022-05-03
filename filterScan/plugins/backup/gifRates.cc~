@@ -1,0 +1,538 @@
+// -*- C++ -*-
+//
+// Package:    test/gifRates
+// Class:      gifRates
+// 
+/**\class gifRates gifRates.cc test/gifRates/plugins/gifRates.cc
+
+ Description: [one line class summary]
+
+ Implementation:
+     [Notes on implementation]
+*/
+//
+// Original Author:  Katerina Kuznetsova
+//         Created:  Fri, 15 Jul 2016 10:01:03 GMT
+//
+//
+
+
+// system include files
+#include <memory>
+#include <iostream>
+
+// root 
+#include "TFile.h"
+#include "TH1F.h"
+#include "TH2F.h"
+#include "TString.h"
+
+// user include files
+#include "FWCore/Framework/interface/Frameworkfwd.h"
+#include "FWCore/Framework/interface/one/EDAnalyzer.h"
+
+#include "FWCore/Framework/interface/Event.h"
+#include "FWCore/Framework/interface/MakerMacros.h"
+
+#include "FWCore/ParameterSet/interface/ParameterSet.h"
+
+#include <FWCore/Framework/interface/ESHandle.h>
+#include <Geometry/Records/interface/MuonGeometryRecord.h>
+
+#include "Geometry/CSCGeometry/interface/CSCGeometry.h"
+#include "Geometry/CSCGeometry/interface/CSCChamber.h"
+#include "Geometry/CSCGeometry/interface/CSCLayer.h"
+#include "Geometry/CSCGeometry/interface/CSCLayerGeometry.h"
+
+#include "DataFormats/CSCDigi/interface/CSCWireDigi.h"
+#include "DataFormats/CSCDigi/interface/CSCWireDigiCollection.h"
+
+#include <DataFormats/CSCRecHit/interface/CSCRecHit2D.h>
+
+#include <DataFormats/CSCRecHit/interface/CSCSegmentCollection.h>
+
+
+//===========================================================================
+//===========================================================================
+// returns:
+// 10 - wrong parameter
+
+class gifRates : public edm::one::EDAnalyzer<edm::one::SharedResources>  {
+
+public:
+  explicit gifRates(const edm::ParameterSet&);
+  ~gifRates();  
+  static void fillDescriptions(edm::ConfigurationDescriptions& descriptions);
+  
+private:
+  virtual void beginJob() override;
+  virtual void analyze(const edm::Event&, const edm::EventSetup&) override;
+  virtual void endJob() override;
+
+  // imput parameters:
+  edm::InputTag wireDigiTag;
+  edm::InputTag cscRecHitTag;
+  edm::InputTag cscSegTag;
+  int           chamberTag;
+  bool          anodeOnlyTag; // if true wNorm = 1 else should account for missing CFEB
+  bool          debugTag;
+
+  // number of events proceeded:
+  int evtsProceededA; // event counter anode hits
+  int evtsProceeded2D; // event counter anode hits
+  int evtsProceededS; // event counter segments
+
+  int prevEvtN;
+
+  float * wL;        // wirelength array
+  float * wH1;       // array with wirehits (L1)
+  float wNorm;       // normalization factor for wire occupancies (test11 vs test27s)
+  bool    fillWL;    // flag to fill wirelength array
+
+  bool                       debug;
+  short unsigned int         chamberType;
+  const short unsigned int * nOfWGs;
+
+  edm::ESHandle<CSCGeometry> h;
+  
+  void handleAnodes  (const edm::Handle<CSCWireDigiCollection> wires);
+  void handle2Dhits  (const edm::Handle<CSCRecHit2DCollection> rechits);
+  int handleSegments (const edm::Handle<CSCSegmentCollection> segments);
+  
+  TFile * fout;     // file to save root histis
+
+  TH1F  * hNofAhit;     // number of anode hits from CSCWireDigi per event
+  TH1F  * hNofAhitL[6]; // number of anode hits from CSCWireDigi per layer per event
+  TH1F  * hAhitL[6];    // anode hits from CSCWireDigi
+  TH1F  * hAhitLNorm[6];// anode hits from CSCWireDigi normalized to wL
+  TH2F  * hALength1;    // anode wire length
+
+  TH1F  * hNofRhit;       // number of RecHits per event
+  TH1F  * hNofRhitL[6];    // number of RecHits per layer per event
+  TH2F  * h2dRHL[6];       // 2D histos of RecHits from csc2DRecHits
+
+  TH2F  * h2dSeg;       // 2D histos of segments belonging to CSCSegmentCollection
+  TH1F  * hNofSeg;      // number of segments per event
+  TH1F  * hsegChi2;     // chi2
+  TH1F  * hsegNof2Dhits;
+  
+  /// !!! TBD to move to header of separate object
+  const short unsigned int nOfWGs1 = 48;
+  const short unsigned int nOfWGs2 = 112;
+};
+
+
+//===========================================================================
+//===========================================================================
+
+
+gifRates::gifRates(const edm::ParameterSet& iConfig):
+		evtsProceededA(0),
+		evtsProceeded2D(0),
+		evtsProceededS(0),
+		prevEvtN(0),
+		wNorm(1.0),
+		fillWL(true){
+   usesResource("TFileService");
+   wireDigiTag  = iConfig.getParameter<edm::InputTag>("wireDigiTag");
+   cscRecHitTag = iConfig.getParameter<edm::InputTag>("cscRecHitTag");
+   cscSegTag    = iConfig.getParameter<edm::InputTag>("cscSegTag");
+   chamberTag   = iConfig.getUntrackedParameter<int>("chamberTag");
+   anodeOnlyTag = iConfig.getUntrackedParameter<bool>("anodeOnlyTag");
+   debugTag     = iConfig.getUntrackedParameter<bool>("debugTag");
+
+   chamberType = chamberTag;
+   debug       = debugTag;
+
+   std::cout << "plotting for chamber type " << chamberType << std::endl;
+   
+
+   switch (chamberType){
+   case 1:
+     nOfWGs = &nOfWGs1;
+     if(!anodeOnlyTag)
+  	   wNorm = 0.75;
+     break;     
+   case 2:
+     nOfWGs = &nOfWGs2;
+     if(!anodeOnlyTag)
+  	   wNorm = 0.8;
+     break;
+   default:
+     std::cout << "Unknown chamber type: " << chamberType << "exiting\n";
+     exit(10);
+     break;
+   };
+   wL = new float [*nOfWGs];
+   memset(wL, 0, (*nOfWGs));
+   wH1 = new float [*nOfWGs];
+   memset(wH1, 0, (*nOfWGs));
+
+}
+
+
+
+gifRates::~gifRates(){
+	delete wL;
+	delete wH1;
+}
+
+
+
+
+void gifRates::beginJob(){
+  fout    = new TFile("histos.root", "RECREATE" );
+  int nbins = *(nOfWGs)+2;
+  std::cout << "nbins " << nbins << std::endl;
+  TString hname;
+
+  fout->mkdir("ALCT");
+  hALength1    = new TH2F("hALength1",    "hALength1",   nbins, -1, nbins+1, 500,  0,   500);
+  hNofAhit     = new TH1F("hNofAhit",     "hNofAhit", 41,   -1, 40);
+
+  fout->mkdir("2dRH");
+  hNofRhit     = new TH1F("hNofRhit",     "hNofRhit", 41,   -1, 40);
+
+  for(short unsigned int i=0; i<6; i++){
+	  fout->cd("ALCT");
+	  hname = "hNofAhitL[";  hname+=i; hname+="]"; hNofAhitL[i] = new TH1F(hname.Data(), hname.Data(), 41,   -1, 40);
+	  hname = "hAhitL[";     hname+=i; hname+="]"; hAhitL[i]    = new TH1F(hname.Data(), hname.Data(), nbins, 0, nbins);
+	  hname = "hAhitLNorm["; hname+=i; hname+="]"; hAhitLNorm[i]= new TH1F(hname.Data(), hname.Data(), nbins, 0, nbins);
+
+	  fout->cd("2dRH");
+	  hname = "hNofRhitL[";  hname+=i; hname+="]"; hNofRhitL[i] = new TH1F(hname.Data(), hname.Data(), 41,   -1, 40);
+	  hname = "h2dRHL[";     hname+=i; hname+="];localY [cm];-localX [cm]";
+	  h2dRHL[i]     = new TH2F(hname.Data(), hname.Data(), 500, -150, 150, 500, -100, 100);
+  };
+
+  fout->mkdir("Segments");
+  fout->cd("Segments");
+  h2dSeg       = new TH2F("h2dSeg",       "h2dSeg;localY [cm];-localX [cm]", 500, -150, 150, 500, -100, 100);
+  hNofSeg      = new TH1F("hNofSeg",      "hNofSeg;number of segments",      21,   -1,  20);
+  hsegChi2     = new TH1F("hsegChi2",     "hsegChi2;#{Chi}^{2} of segment",  1000,  0,  20);
+  hsegNof2Dhits= new TH1F("hsegNof2Dhits","hsegNof2Dhits; number of 2D RecHit per segment", 10, -1, 9);
+}
+
+
+void gifRates::endJob() {
+
+	if(evtsProceededA>0){
+		for(short unsigned int l=0; l<6; l++){
+			for(short unsigned int i=0; i<*(nOfWGs);i++){
+				if(wL[i]>0){
+					if(chamberType==1 && i<14){ // all CFEBs for ME11A
+						hAhitLNorm[l]->SetBinContent(i+1, hAhitL[l]->GetBinContent(i+1)/wL[i]/evtsProceededA);
+						hAhitLNorm[l]->SetBinError  (i+1, hAhitL[l]->GetBinError(i+1)/wL[i]/evtsProceededA);
+					}else{
+						hAhitLNorm[l]->SetBinContent(i+1, hAhitL[l]->GetBinContent(i+1)/wL[i]/wNorm/evtsProceededA);
+						hAhitLNorm[l]->SetBinError  (i+1, hAhitL[l]->GetBinError(i+1)/wL[i]/wNorm/evtsProceededA);
+					};
+				}else{
+					hAhitLNorm[l]->SetBinContent(i+1, 1);
+				};
+			};
+		};
+	};
+	if(evtsProceededS>0){
+	  hNofSeg->Sumw2();
+	  hNofSeg->Scale(1./hNofSeg->GetEntries());
+	};
+
+	for(short unsigned int l=0; l<6; l++){
+		fout->cd("ALCT");
+		hNofAhitL[l]->Write();
+		hAhitL[l]->Write();
+		hAhitLNorm[l]->Write();
+		fout->cd("2dRH");
+		hNofRhitL[l]->Write();
+		h2dRHL[l]->Write();
+	};
+
+	fout->cd("ALCT");
+	hNofAhit->Write();
+	hALength1->Write();
+
+	fout->cd("2dRH");
+	hNofRhit->Write();
+
+	fout->cd("Segments");
+	h2dSeg->Write();
+	hNofSeg->Write();
+	hsegChi2->Write();
+	hsegNof2Dhits->Write();
+	fout->Close();
+
+	for(short unsigned int i=0; i<6; i++){
+		hNofAhitL[i]->Delete();
+		hAhitL[i]->Delete();
+		hAhitLNorm[i]->Delete();
+		hNofRhitL[i]->Delete();
+		h2dRHL[i]->Delete();
+	};
+
+	for(short unsigned int i=0; i<*(nOfWGs);i++){
+		std::cout << i<< "\t"<< wL[i] << "\t" << wH1[i] << std::endl;
+	};
+}
+
+
+
+//===========================================================================
+//===========================================================================
+void gifRates::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup){
+//===========================================================================
+  iSetup.get<MuonGeometryRecord>().get( h );
+  
+  double Event = iEvent.id().event();
+  prevEvtN++;
+  //  std::cout << prevEvtN << "\t" << Event << std::endl;
+  if(int(Event)!=prevEvtN){
+    std::cout << "missing evtN = " << prevEvtN << "; next event " << Event << std::endl;
+    prevEvtN = int(Event);
+  };
+  
+  //int Orbit, BX;
+  //Orbit = iEvent.orbitNumber();
+  //BX    = iEvent.bunchCrossing();
+  if(debug)
+	  std::cout << "\n\n================================================\n-=\t"<< Event << "\t=-\n";
+  //std::cout << ":" << Orbit << "\t" << BX << std::endl;
+
+  edm::Handle<CSCWireDigiCollection> wires;
+  iEvent.getByLabel(wireDigiTag,wires);
+  handleAnodes(wires);
+  evtsProceededA++;
+
+
+  edm::Handle<CSCRecHit2DCollection> rechits;
+  iEvent.getByLabel(cscRecHitTag, rechits);
+  handle2Dhits(rechits);
+  evtsProceeded2D++;
+
+  /*
+  edm::Handle<CSCSegmentCollection> segments;
+  iEvent.getByLabel(cscSegTag, segments);
+  handleSegments(segments);
+  evtsProceededS++;
+  */
+}
+
+
+
+//===========================================================================
+//===========================================================================
+void gifRates::handleAnodes(const edm::Handle<CSCWireDigiCollection> wires){
+  //===========================================================================
+  // http://cmslxr.fnal.gov/source/DataFormats/CSCDigi/interface/CSCWireDigiCollection.h
+  // https://cmssdt.cern.ch/SDT/doxygen/CMSSW_7_4_15/doc/html/d3/de6/MuonDigiCollection_8h_source.html
+  const CSCGeometry* pgeom = &*h;
+
+  int hitsPerLayer[6] = {0,0,0,0,0,0};
+
+  for (CSCWireDigiCollection::DigiRangeIterator wi=wires->begin(); wi!=wires->end(); wi++) {
+
+    CSCDetId id = (CSCDetId)(*wi).first;
+    /*
+    if(debug){
+      std::cout <<  "Ahits: chamber " << id.chamber()
+		<< " station " << id.station()
+		<< " ring    " << id.ring()
+		<< " layer   " << id.layer() << std::endl;
+    };
+    */
+    if(id.chamber()!=chamberType)
+      continue;
+
+    // just to get wire lengths //
+    const CSCLayer* player   =pgeom->layer(id);
+    const CSCLayerGeometry * playergeometry = player->geometry();
+    if(fillWL){
+    	for(short unsigned int i=0; i<*(nOfWGs);i++)
+    		wL[i] = playergeometry->lengthOfWireGroup(i+1);
+    	fillWL = false;
+    };///////////////////////////
+
+    std::vector<CSCWireDigi>::const_iterator wireIt   = (*wi).second.first;
+    std::vector<CSCWireDigi>::const_iterator lastWire = (*wi).second.second;
+    //https://cmssdt.cern.ch/SDT/doxygen/CMSSW_7_5_1/doc/html/de/d45/CSCWireDigi_8h_source.html
+
+
+    for( ; wireIt != lastWire; ++wireIt){
+    	bool nextWG = true;
+
+    	int nWGh    = 1;
+    	std::vector<CSCWireDigi>::const_iterator nwgit = wireIt+1;
+    	while(nextWG and wireIt!=lastWire and nwgit!=lastWire){
+
+    		int WGN = wireIt->getWireGroup();
+
+        	//hALength1->Fill(wireIt->getWireGroup(), playergeometry->lengthOfWireGroup(wireIt->getWireGroup()));
+    		if(id.layer()==1){ // just for printout
+        		wH1[WGN-1]++;
+        	};
+    		hAhitL[id.layer()-1]->Fill(WGN);
+        	std::vector<int> TBs = wireIt->getTimeBinsOn();
+        	if(debug){
+        		std::cout << "\t WG: " << WGN
+        						<< "; length " << playergeometry->lengthOfWireGroup(WGN)
+    							<< "; TB: "    << wireIt->getTimeBin()
+    							<< " (";
+        		for(std::vector<int>::iterator tb=TBs.begin(); tb!=TBs.end(); ++tb){
+        			std::cout << (*tb) << " ";
+        		};std::cout << ")" << std::endl;
+        	};
+
+    		nextWG = ( (nwgit->getWireGroup()-wireIt->getWireGroup())==1 );
+    		++wireIt;
+    		++nwgit;
+
+
+
+
+        	if(WGN-LastWG>1){ // define a "hit" as separated WGs
+        		hitsPerLayer[id.layer()-1]++;
+        		if(debug)
+            		std::cout << "\t\t==> "<< nWGh+1 << "-WG hit was added\n";
+        		nWGh = 0;
+        	}else{
+        		nWGh++;
+        	};
+        	LastWG = WGN;
+        	//LastL  = id.layer();
+
+
+
+    	};
+
+    }; // end loop wireIt
+
+  }; // end loop wi
+
+  unsigned int nhits = 0;
+  for(short unsigned int i=0; i<6; i++){
+	  hNofAhitL[i]->Fill(hitsPerLayer[i]);
+	  nhits+=(hitsPerLayer[i]);
+  };
+  hNofAhit->Fill(nhits);
+};
+
+
+
+//===========================================================================
+//===========================================================================
+void gifRates::handle2Dhits  (const edm::Handle<CSCRecHit2DCollection> rechithandle){
+//===========================================================================
+	//int hitsPerLayer[6] = {0,0,0,0,0,0};
+	for(CSCRecHit2DCollection::const_iterator rechit=rechithandle->begin(); rechit != rechithandle->end(); ++rechit){
+	    CSCDetId id = (*rechit).cscDetId();
+
+	    if(debug){
+	      std::cout <<  "2Dhits: chamber " << id.chamber()
+			<< " station " << id.station()
+			<< " ring    " << id.ring()
+			<< " layer   " << id.layer() << std::endl;
+	    };
+
+	    /*    	if(debug){
+    		std::cout << "\t Wire local: " << (*rechit)->localPosition().x()
+    						<< "; central wire: " << (*rechit).hitWire()
+							<< "; TB: "    << wireIt->getTimeBin()
+							<< " (";
+    		for(std::vector<int>::iterator tb=TBs.begin(); tb!=TBs.end(); ++tb){
+    			std::cout << (*tb) << " ";
+    		};std::cout << ")" << std::endl;
+
+		}*/
+	};
+};
+
+//===========================================================================
+//===========================================================================
+int gifRates::handleSegments(const edm::Handle<CSCSegmentCollection> segments){
+//===========================================================================
+  //https://cmssdt.cern.ch/SDT/doxygen/CMSSW_7_5_1/doc/html/de/d34/classCSCSegment.html
+  //https://cmssdt.cern.ch/SDT/doxygen/CMSSW_7_5_1/doc/html/d2/dd8/CSCSegment_8h_source.html
+  // segment uses 
+  int nSegments = 0;
+  if(debug)
+	  std::cout << "number of Segments: " << nSegments << std::endl;
+
+  for(CSCSegmentCollection::const_iterator dSiter=segments->begin(); dSiter != segments->end(); ++dSiter) {
+    const CSCDetId sid = (*dSiter).cscDetId();
+    if(sid.chamber()!=chamberType)
+      continue;
+    nSegments++;
+    //    LocalPoint localPosition() const { return theOrigin; }
+    //    LocalVector localDirection() const { return theLocalDirection; }
+    //    LocalPoint theOrigin;          // in chamber frame - the GeomDet local coordinate system
+    //    LocalVector theLocalDirection; // in chamber frame - the GeomDet local coordinate system
+    
+    LocalPoint localPos = (*dSiter).localPosition();
+    float segX     = localPos.x();
+    float segY     = localPos.y();
+    h2dSeg->Fill(segY, -segX);
+    hsegChi2->Fill((*dSiter).chi2());
+    hsegNof2Dhits->Fill( (*dSiter).nRecHits() );
+    if(debug){
+      std::cout << "local coordinates: " << segX << " ; " << segY << std::endl;
+    };
+    
+    const std::vector<CSCRecHit2D> seg2DhitVec = (*dSiter).specificRecHits();
+
+    for(std::vector<CSCRecHit2D>::const_iterator seg2Dhit=seg2DhitVec.begin(); seg2Dhit!=seg2DhitVec.end(); ++seg2Dhit){
+
+      //https://cmssdt.cern.ch/SDT/doxygen/CMSSW_7_5_1/doc/html/dc/d18/cscRecHitD__cfi_8py_source.html
+      //https://cmssdt.cern.ch/SDT/doxygen/CMSSW_7_5_1/doc/html/df/d89/CSCRecHitDProducer_8cc_source.html      
+      //      edm::ESHandle<CSCGeometry> h;
+      //      setup.get<MuonGeometryRecord>().get( h );
+      //      const CSCGeometry* pgeom = &*h;
+      //      recHitBuilder_->setGeometry( pgeom );
+      //      //https://cmssdt.cern.ch/SDT/doxygen/CMSSW_7_5_1/doc/html/d1/da0/classCSCGeometry.html
+      //https://cmssdt.cern.ch/SDT/doxygen/CMSSW_7_5_1/doc/html/d6/dc1/CSCRecHitDBuilder_8h_source.html
+      //https://cmssdt.cern.ch/SDT/doxygen/CMSSW_7_5_1/doc/html/d8/dcd/CSCMake2DRecHit_8cc_source.html
+      // finally the localposition is calculated here:
+      //        LocalPoint lp11 = layergeom_->stripWireIntersection( centerStrip, centerWire);
+      //   float xWithinChamber = lp11.x();
+      //                    lp0 = LocalPoint( xWithinChamber, layergeom_->yOfWire(centerWire, xWithinChamber) );
+      // where const CSCLayerGeometry* layergeom_;
+      //??? https://cmssdt.cern.ch/SDT/doxygen/CMSSW_7_5_1/doc/html/d7/df7/classCSCRecoConditions.html
+      
+      // http://cmslxr.fnal.gov/source/Geometry/CSCGeometryBuilder/data/cscSpecs.xml?v=CMSSW_7_5_1
+      
+      //https://cmssdt.cern.ch/SDT/doxygen/CMSSW_7_5_1/doc/html/d7/ded/CSCRecHit2D_8h_source.html
+      
+      const CSCDetId id = (*seg2Dhit).cscDetId();
+      const CSCGeometry* pgeom = &*h;
+      
+      const CSCLayer* player   =pgeom->layer(id);
+      const CSCLayerGeometry * playergeometry = player->geometry ();
+
+      if(debug){
+    	  std::cout <<  "chamber " << id.chamber()
+		  << " station " << id.station()
+		  << " layer   " << id.layer()
+		  << " WG      " << (*seg2Dhit).hitWire()
+		  << " recalculatedWG " << playergeometry->wireGroup(playergeometry->nearestWire(localPos))
+		  << std::endl;
+      };
+      
+    }; // end 2D hit loop
+    
+  }; // end segment collection loop
+  hNofSeg->Fill(nSegments);
+  return nSegments;
+};
+
+
+
+
+// ------------ method fills 'descriptions' with the allowed parameters for the module  ------------
+void gifRates::fillDescriptions(edm::ConfigurationDescriptions& descriptions) {
+  //The following says we do not know what parameters are allowed so do no validation
+  // Please change this to state exactly what you do use, even if it is no parameters
+  edm::ParameterSetDescription desc;
+  desc.setUnknown();
+  descriptions.addDefault(desc);
+}
+
+DEFINE_FWK_MODULE(gifRates);

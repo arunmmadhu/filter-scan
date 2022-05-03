@@ -1,0 +1,5 @@
+ me11data/2pct/A9150.root      246.4          24-JAN-2020
+ me11data/2pct/A9372.root      277.98         03-MAR-2021
+ me11data/2pct/A9409.root      282.48         10-MAR-2021
+ me11data/2pct/A9561.root      313.8          14-APR-2021
+ me11data/2pct/A9762.root      362.26         26-MAY-2021
